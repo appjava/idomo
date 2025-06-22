@@ -1,0 +1,36 @@
+auto:
+  timeOffCh1: 00:00
+  timeOffCh2: '23:00'
+  timeOffCh3: 00:30
+  timeOffCh4: '23:30'
+  timeOffCh5: ''
+  timeOffCh6: ''
+  timeOnCh1: '19:00'
+  timeOnCh2: '21:00'
+  timeOnCh3: '18:30'
+  timeOnCh4: '18:45'
+  timeOnCh5: ''
+  timeOnCh6: ''
+devices:
+  1: Luz Jacuzzi
+  2: Luz Cuarto
+  3: Luz Exterior
+  4: Luz Sala
+  5: Energia Reserva
+  6: Energia Inversor
+esp2_ip: 192.168.0.131
+esp_ip: 192.168.0.130
+sensors:
+  Capacity: Estado
+  Energy: Consumido
+  Hours: Transcurrido
+  Humidity: Humedad
+  Power: Consumiendo
+  Source: Fuente
+  Temperature: Temperatura
+  Voltage: Voltaje
+solar:
+  effiPanel: 0.15
+  potPanel: 150
+  lati: 3.5599
+  longi: -76.5755
