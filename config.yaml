@@ -5,14 +5,14 @@ auto:
   timeOffCh4: '23:30'
   timeOffCh5: ''
   timeOffCh6: ''
-  timeOnCh1: '19:00'
+  timeOnCh1: '18:30'
   timeOnCh2: '21:00'
-  timeOnCh3: '18:30'
+  timeOnCh3: '19:00'
   timeOnCh4: '18:45'
   timeOnCh5: ''
   timeOnCh6: ''
 devices:
-  1: Luz Jacuzzi
+  1: Luz Balcon
   2: Luz Cuarto
   3: Luz Exterior
   4: Luz Sala
@@ -31,6 +31,6 @@ sensors:
   Voltage: Voltaje
 solar:
   effiPanel: 0.15
-  potPanel: 150
   lati: 3.5599
   longi: -76.5755
+  potPanel: 240

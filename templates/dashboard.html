@@ -732,11 +732,13 @@
                                 <div class="widget-label">{{ sensor_names.Power | default('Potencia') }}</div>
                                 <div class="widget-value" id="power_value">-- W</div>
                             </div>
-                            <div class="widget">
+                                
+                            <div class="widget energy"> <!-- AÑADIR CLASE "energy" -->
                                 <div class="widget-icon energy"><i class="fa-solid fa-bolt"></i></div>
-                                <div class="widget-label">{{ sensor_names.Energy | default('Energía') }}</div>
+                                <div class="widget-label">Energía Actual</div>
                                 <div class="widget-value" id="energy_value">-- Wh</div>
                             </div>
+
                             <div class="widget">
                                 <div class="widget-icon energy"><i class="fa-regular fa-sun"></i></div>
                                 <div class="widget-label">Esperado</div>
@@ -754,6 +756,13 @@
                             </div>
                         </div>
                     </section>
+
+                    <!-- ========= NUEVA SECCIÓN PARA EL GRÁFICO DE HOY ========= -->
+                    <section id="today-consumption-section" class="device-group">
+                        <h2 class="section-title">Consumo de Hoy (Acumulado en tiempo real)</h2>
+                        <canvas id="todayConsumptionChart" style="max-height: 250px;"></canvas>
+                    </section>
+                    <!-- ======================================================= -->
 
                     <section id="devices-section" class="device-group">
                         <h2 class="section-title">Control de Dispositivos</h2>
@@ -828,6 +837,10 @@
                         </div>
                     </section>
                 </div>
+                <section id="consumption-chart-section">
+                    <h2 class="section-title">Histórico de Consumo</h2>
+                    <canvas id="electricityChart"></canvas>
+                </section>
 
                 <!--<aside class="right-panel">
                     <section id="consumption-chart-section-placeholder"> <h2 class="section-title"></h2>
@@ -902,6 +915,8 @@
         const automationListEl = document.getElementById('automation-list');
 
         let electricityChartInstance = null;
+        let todayConsumptionChartInstance = null; // <--- NUEVA VARIABLE
+
         const chartDataPoints = 30; // Show last 30 energy readings
         let energyHistory = [];
 
@@ -1144,6 +1159,22 @@
                     }
                     if(hoursValueEl) hoursValueEl.textContent = data2.Hours !== undefined ? `${data2.Hours}h` : 'N/A';
                     if(sourceValueEl) sourceValueEl.textContent = data2.Source !== undefined ? `${data2.Source.toUpperCase()}` : 'N/A';
+
+                    // --- NUEVA LÓGICA PARA LA TARJETA DE ENERGÍA ---
+                    //const energyValueEl = document.getElementById('energy_value');
+                    if (energyValueEl) {
+                        let energiaMostrada = 0;
+                        let etiquetaEnergia = "Energía";
+
+                        if (data2.Source === 'solar') {
+                            energiaMostrada = data2.PaSol || 0;
+                        } else { // 'red'
+                            energiaMostrada = data2.PaRed || 0;
+                        }
+                        
+                        document.querySelector('.widget.energy .widget-label').textContent = etiquetaEnergia;
+                        //energyValueEl.textContent = `${parseFloat(energiaMostrada).toFixed(0)} Wh`;
+                     }
                 }
             } catch (error) {
                 console.error('Fallo al actualizar datos ESP2:', error);
@@ -1152,6 +1183,8 @@
                 if(hoursValueEl) hoursValueEl.textContent = 'Error Red';
                 if(sourceValueEl) sourceValueEl.textContent = 'Error Red';
             }
+
+            updateTodayConsumptionChart();
         }
 
         async function sendDeviceCommand(channel, action, deviceName) {
@@ -1383,17 +1416,152 @@
         //adjustViewport();
         //window.addEventListener('resize', adjustViewport);
 
+        async function loadAndDisplayHistory() {
+    try {
+        const response = await fetch('/api/history');
+        const historyData = await response.json();
+        
+        if (historyData.error) {
+            console.error(historyData.error);
+            return;
+        }
+
+        // historyData es un array de objetos: [{date, solar_wh, grid_wh}, ...]
+        // Ordena los datos por fecha para el gráfico
+        historyData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        const labels = historyData.map(d => d.date);
+        const solarData = historyData.map(d => d.solar_wh);
+        const gridData = historyData.map(d => d.grid_wh);
+
+        // Aquí puedes usar Chart.js para crear un gráfico de barras
+        // Reemplaza el gráfico de línea existente con uno de barras
+        const ctx = document.getElementById('electricityChart').getContext('2d');
+        if(window.myHistoryChart) {
+            window.myHistoryChart.destroy(); // Destruye el gráfico anterior si existe
+        }
+        window.myHistoryChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Consumo Solar (Wh)',
+                        data: solarData,
+                        backgroundColor: 'rgba(255, 206, 86, 0.7)', // Amarillo
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Consumo Red (Wh)',
+                        data: gridData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)', // Rojo
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Consumo (Wh)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Fecha' }
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Error al cargar el historial de consumo:", error);
+    }
+}
+
+        function initTodayConsumptionChart() {
+    const ctx = document.getElementById('todayConsumptionChart').getContext('2d');
+    
+    todayConsumptionChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Solar', 'Red'], // Solo dos categorías
+            datasets: [{
+                label: 'Consumo del Día (Wh)',
+                data: [0, 0], // Empezamos con 0
+                backgroundColor: [
+                    'rgba(255, 206, 86, 0.7)', // Amarillo para Solar
+                    'rgba(255, 99, 132, 0.7)'  // Rojo para Red
+                ],
+                borderColor: [
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(255, 99, 132, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Energía Acumulada (Wh)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false // Opcional: la leyenda es redundante con solo 2 barras
+                }
+            }
+        }
+    });
+}
+
+        async function updateTodayConsumptionChart() {
+    if (!todayConsumptionChartInstance) return; // No hacer nada si el gráfico no está listo
+
+    try {
+        const response = await fetch('/api/today_consumption');
+        const data = await response.json();
+
+        if (data.error) {
+            console.error("Error al obtener consumo de hoy:", data.error);
+            return;
+        }
+
+        // Actualizamos los datos del gráfico con los nuevos valores
+        todayConsumptionChartInstance.data.datasets[0].data[0] = data.solar_wh;
+        todayConsumptionChartInstance.data.datasets[0].data[1] = data.grid_wh;
+
+        // Le decimos a Chart.js que se redibuje con los datos nuevos
+        todayConsumptionChartInstance.update();
+
+    } catch (error) {
+        console.error("Fallo de conexión al actualizar consumo de hoy:", error);
+    }
+}
+
         document.addEventListener('DOMContentLoaded', () => {
             //initElectricityChart();
+            loadAndDisplayHistory();  // Carga el historial de días pasados
+            initTodayConsumptionChart(); // <--- INICIALIZA EL NUEVO GRÁFICO
+
             updateDashboardData(); 
             loadAutomationRules();
+
             setInterval(updateDashboardData, 6000); 
             setInterval(loadAutomationRules, 3000);
             setInterval(obtenerDatos, 30000);
+            //setInterval(updateTodayConsumptionChart, 15000);
             automationForm.reset();
             document.getElementById('rule-channel').value = 1; 
             automationForm.addEventListener('submit', saveAutomationRule);
             //window.addEventListener('resize', adjustViewport);
+            //loadAndDisplayHistory(); // Llama a la función al cargar la página
         });
     </script>
 </body>

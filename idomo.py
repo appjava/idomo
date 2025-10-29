@@ -5,7 +5,7 @@ import time
 import schedule
 import threading
 import pytz
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from flask import Flask, request, render_template, jsonify
 from flask_httpauth import HTTPBasicAuth
 
@@ -35,8 +35,77 @@ climateData = []
 climateURL = ""
 
 app = Flask(__name__)
+# Configuración de la base de datos SQLite
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///idomo.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
 PORT = 5000
+
+# --- Modelo de la Base de Datos ---
+class DailyConsumption(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Date, unique=True, nullable=False)
+    solar_wh = db.Column(db.Float, default=0.0)
+    grid_wh = db.Column(db.Float, default=0.0)
+
+    def __repr__(self):
+        return f'<DailyConsumption {self.day} - Solar: {self.solar_wh}Wh, Grid: {self.grid_wh}Wh>'
+
+# --- Variables para acumular consumo en memoria ---
+# (Estos se reinician cada día)
+
+current_solar_wh = 0.0
+current_grid_wh = 0.0
+
+# --- Lógica de Sincronización ---
+
+def sync_with_esp():
+    """Se pone al día con los datos del ESP al arrancar y periódicamente."""
+    global current_solar_wh, current_grid_wh
+    try:
+        print("Sincronizando con el ESP...")
+        esp_url = f"http://{ESP2_IP}/sensors"
+        response = requests.get(esp_url, timeout=5)
+        data = response.json()
+        
+        # Sincronizar contadores de hoy
+        esp_solar_today = float(data.get('PaSol', 2))
+        esp_grid_today = float(data.get('PaRed', 2))
+        esp_energy = float(data.get('Energy', 2))
+        power = float(data.get('Power', 0))
+        source = data.get('Source', 'red')
+        
+        # Si el valor del ESP es mayor, significa que el backend se reinició.
+        if esp_solar_today > current_solar_wh:
+            current_solar_wh = esp_solar_today
+        if esp_grid_today > current_grid_wh:
+            current_grid_wh = esp_grid_today
+    
+
+        print(f"Sincronización completa. Solar hoy: {current_solar_wh:.2f}Wh, Red hoy: {current_grid_wh:.2f}Wh")
+
+        # Ponerse al día con los datos de ayer
+        yesterday = date.today() - timedelta(days=1)
+        record = DailyConsumption.query.filter_by(day=yesterday).first()
+        
+        # Si no hay registro de ayer, o si está en cero, lo actualizamos.
+        if not record or (record.solar_wh == 0 or record.grid_wh == 0):
+            esp_solar_yesterday = float(data.get('PaSolAyer', 2))
+            esp_grid_yesterday = float(data.get('PaRedAyer', 2))
+            
+            if not record:
+                record = DailyConsumption(day=yesterday)
+                db.session.add(record)
+                
+            record.solar_wh = esp_solar_yesterday
+            record.grid_wh = esp_grid_yesterday
+            db.session.commit()
+            print(f"Base de datos actualizada para ayer ({yesterday}) con datos del ESP.")
+
+    except Exception as e:
+        print(f"Error durante la sincronización con el ESP: {e}")
+
 
 def get_device_name(channel_num):
     return DEVICE_NAMES.get(channel_num, f"Dispositivo CH{channel_num}")
@@ -138,6 +207,64 @@ def set_device_state(channel_num, action):
         return jsonify({"error": f"No se pudo conectar con el ESP8266 ({device_name}). Verifica la IP y la red."}), 503
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error inesperado con {device_name}: {str(e)}"}), 500
+
+@app.route('/api/history')
+def get_history():
+    """Devuelve el historial de consumo de los últimos 30 días."""
+    try:
+        # Consulta los últimos 30 registros ordenados por fecha
+        records = DailyConsumption.query.order_by(DailyConsumption.day.desc()).limit(30).all()
+        history_data = [
+            {
+                "date": record.day.strftime('%Y-%m-%d'),
+                "solar_wh": record.solar_wh,
+                "grid_wh": record.grid_wh
+            } for record in records
+        ]
+        return jsonify(history_data)
+    except Exception as e:
+        return jsonify({"error": f"Error al leer la base de datos: {str(e)}"}), 500
+
+@app.route('/api/today_consumption')
+def get_today_consumption():
+    sync_with_esp()
+    """Devuelve el consumo acumulado en tiempo real para el día de hoy."""
+    # Estas son las variables globales que tu hilo 'record_consumption' ya está actualizando.
+    # Simplemente las empaquetamos en un JSON y las devolvemos.
+    today_data = {
+        "solar_wh": current_solar_wh,
+        "grid_wh": current_grid_wh
+    }
+    return jsonify(today_data)
+
+# --- Lógica de Registro de Consumo ---
+
+
+
+def save_daily_totals_and_reset():
+    """Guarda los totales del día en la BD y reinicia los contadores."""
+    global current_solar_wh, current_grid_wh
+
+    today = date.today()
+    
+    # Busca si ya existe un registro para hoy
+    record = DailyConsumption.query.filter_by(day=today).first()
+    if not record:
+        # Si no existe, crea uno nuevo
+        record = DailyConsumption(day=today, solar_wh=0, grid_wh=0)
+        db.session.add(record)
+        
+    # Actualiza los valores (o los establece si es nuevo)
+    # Usamos += para asegurarnos de no perder datos si el script se reinicia durante el día
+    record.solar_wh = current_solar_wh
+    record.grid_wh = current_grid_wh
+    
+    db.session.commit()
+    print(f"Guardado el consumo total del día {today}: Solar {record.solar_wh:.2f}Wh, Red {record.grid_wh:.2f}Wh")
+    
+    # Reinicia los contadores para el día siguiente
+    current_solar_wh = 0.0
+    current_grid_wh = 0.0
 
 
 #------ Auto ----
@@ -341,8 +468,31 @@ def obtener_datos_clima():
 
 #---------------------------------
 
+# --- Arranque de Hilos y Servidor ---
+
 if __name__ == '__main__':
-    threading.Thread(target=programar_luces).start()
+    with app.app_context():
+        db.create_all() # Crea el fichero idomo.db y las tablas si no existen
+        sync_with_esp() # <--- SINCRONIZA AL ARRANCAR
+
+    # Hilo para la automatización de luces
+    threading.Thread(target=programar_luces, daemon=True).start()
+    
+    # Hilo para registrar el consumo de energía
+    #threading.Thread(target=sync_with_esp, daemon=True).start()
+    
+    # Programar el guardado en BD todos los días a las 23:59
+    schedule.every().day.at("23:59").do(save_daily_totals_and_reset)
+    
+    #schedule.every().hour.do(sync_with_esp)
+
+    # (Necesitarás un pequeño hilo para que schedule.run_pending() se ejecute)
+    def run_scheduler():
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    threading.Thread(target=run_scheduler, daemon=True).start()
+
     print(f"Servidor Flask ejecutándose en http://0.0.0.0:{PORT}")
     print(f"Accede al dashboard en http://<IP_DE_TU_MOVIL>:{PORT}/")
     print(f"Controlando ESP8266 en http://{ESP_IP} y http://{ESP2_IP}")
