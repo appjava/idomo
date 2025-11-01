@@ -15,6 +15,8 @@ const powerValueEl = document.getElementById('power_value');
 const generateValueEl = document.getElementById('generate_value');
 const solarMoonValueEl = document.getElementById('solarMoon');
 const energyValueEl = document.getElementById('energy_value');
+const paSolValueEl = document.getElementById('paSol_value');
+const paRedValueEl = document.getElementById('paRed_value');
 const totalEsperadoValueEl = document.getElementById('esperado_value');
 const hoursValueEl = document.getElementById('hours_value');
 const sourceValueEl = document.getElementById('source_value');
@@ -263,6 +265,8 @@ async function updateDashboardData() {
             if(powerValueEl) powerValueEl.textContent = data2.Power !== undefined ? `${data2.Power}W` : 'N/A';
             if(energyValueEl) {
                 energyValueEl.textContent = data2.Energy !== undefined ? `${data2.Energy}Wh` : 'N/A';
+                paSolValueEl.textContent = data2.PaSol !== undefined ? `${data2.PaSol}Wh` : 'N/A';
+                paRedValueEl.textContent = data2.PaRed !== undefined ? `${data2.PaRed}Wh` : 'N/A';
                 /*if (data2.Power !== undefined)
                     updateElectricityChart(data2.Power);*/
             }
@@ -289,6 +293,8 @@ async function updateDashboardData() {
         console.error('Fallo al actualizar datos ESP2:', error);
         if(powerValueEl) powerValueEl.textContent = 'Error Red';
         if(energyValueEl) energyValueEl.textContent = 'Error Red';
+        if(paSolValueEl) paSolValueEl.textContent = 'Error Red';
+        if(paRedValueEl) paRedValueEl.textContent = 'Error Red';
         if(hoursValueEl) hoursValueEl.textContent = 'Error Red';
         if(sourceValueEl) sourceValueEl.textContent = 'Error Red';
     }
