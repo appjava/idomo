@@ -18,8 +18,8 @@ devices:
   4: Luz Sala
   5: Energia Reserva
   6: Energia Inversor
-esp2_ip: 192.168.0.131
-esp_ip: 192.168.0.130
+esp2_ip: 192.168.10.131
+esp_ip: 192.168.10.130
 sensors:
   Capacity: Estado
   Energy: Consumido

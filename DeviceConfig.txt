@@ -1,0 +1,58 @@
+
+1. Preparación del Sistema y Entorno
+Estos comandos sirvieron para actualizar los repositorios internos de Termux, 
+instalar el núcleo de Python y aislar tu proyecto en un entorno virtual limpio:
+
+# Actualizar el sistema de Termux y sus repositorios
+pkg update && pkg upgrade -y
+
+# Instalar el lenguaje de programación Python
+pkg install python -y
+
+# Crear una carpeta dedicada para tu proyecto y entrar en ella
+mkdir mi-proyecto-flask && cd mi-proyecto-flask
+
+# Crear el entorno virtual (venv) para no mezclar librerías
+python -m venv venv
+
+# Activar el entorno virtual (se debe hacer siempre antes de correr el script)
+source venv/bin/activate
+
+
+2. Instalación del Servidor y Extensiones de Flask
+
+Con estos comandos instalamos el framework web principal y las herramientas que manejan 
+la base de datos de los dispositivos y la seguridad del panel:
+
+# Instalar el framework web principal
+pip install Flask
+
+# Instalar la extensión para gestionar la base de datos (SQLAlchemy)
+pip install Flask-SQLAlchemy
+
+# Instalar la extensión para el manejo de autenticación de usuarios
+pip install Flask-HTTPAuth
+
+
+3. Instalación de Utilidades y Tareas en Segundo Plano
+Estos paquetes externos sirvieron para que tu backend pueda leer configuraciones de archivos de texto, 
+procesar tareas programadas en el tiempo y manejar los horarios correctamente:
+
+# Instalar el lector de archivos de configuración .yaml o .yml
+pip install PyYAML
+
+# Instalar el planificador de tareas para automatizaciones
+pip install schedule
+
+# Instalar el gestor de zonas horarias globales
+pip install pytz
+
+
+Consejo final de respaldo
+Ahora que todo funciona de maravilla, te recomiendo ejecutar este comando dentro de tu entorno virtual:
+
+pip freeze > requirements.txt
+
+Esto generará un archivo llamado requirements.txt con la lista exacta de todo lo que acabamos de instalar. 
+Si el día de mañana quieres desplegar este mismo backend en otro teléfono o en una computadora, 
+solo tendrás que clonar tu código y ejecutar: pip install -r requirements.txt para instalar todo en un solo segundo.
